@@ -1,6 +1,7 @@
 package main
 
 import (
+	"fmt"
 	"log"
 	"log/slog"
 	"net"
@@ -18,6 +19,7 @@ type Server struct {
 	ln        net.Listener
 	addPeerCh chan *Peer
 	quitCh    chan struct{}
+	msgCh     chan []byte
 }
 
 func NewServer(cfg Config) *Server {
@@ -30,6 +32,7 @@ func NewServer(cfg Config) *Server {
 		peers:     make(map[*Peer]bool),
 		addPeerCh: make(chan *Peer),
 		quitCh:    make(chan struct{}),
+		msgCh:     make(chan []byte),
 	}
 }
 
@@ -52,6 +55,8 @@ func (s *Server) Start() error {
 func (s *Server) loop() {
 	for {
 		select {
+		case rawMsg := <-s.msgCh:
+			fmt.Println(rawMsg)
 		case <-s.quitCh:
 			return
 		case peer := <-s.addPeerCh:
@@ -74,10 +79,14 @@ func (s *Server) acceptLoop() error {
 }
 
 func (s *Server) handleConn(conn net.Conn) {
-	peer := NewPeer(conn)
+	peer := NewPeer(conn, s.msgCh)
 	s.addPeerCh <- peer
-	slog.Info("new peer connected", "remoteAddrs", conn.RemoteAddr())
-	peer.readLoop()
+
+	slog.Info("new peer connected", "remoteAddr", conn.RemoteAddr())
+
+	if err := peer.readLoop(); err != nil {
+		slog.Error("peer read error", "err", err, "remoteAddr", conn.RemoteAddr())
+	}
 }
 
 func main() {

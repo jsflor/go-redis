@@ -124,8 +124,10 @@ func main() {
 
 	client := client.New("localhost:8080")
 
-	if err := client.Set(context.Background(), "foo", "bar"); err != nil {
-		log.Fatal(err)
+	for i := 0; i < 5; i++ {
+		if err := client.Set(context.Background(), fmt.Sprintf("foo_%d", i), fmt.Sprintf("bar_%d", i)); err != nil {
+			log.Fatal(err)
+		}
 	}
 
 	time.Sleep(time.Second)

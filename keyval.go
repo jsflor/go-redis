@@ -13,20 +13,20 @@ func NewKV() *KV {
 	}
 }
 
-func (kv *KV) Set(key string, val string) error {
+func (kv *KV) Set(key []byte, val []byte) error {
 	kv.mu.Lock()
 	defer kv.mu.Unlock()
 
-	kv.data[key] = []byte(val)
+	kv.data[string(key)] = []byte(val)
 
 	return nil
 }
 
-func (kv *KV) Get(key string) ([]byte, bool) {
+func (kv *KV) Get(key []byte) ([]byte, bool) {
 	kv.mu.RLock()
 	defer kv.mu.RUnlock()
 
-	val, ok := kv.data[key]
+	val, ok := kv.data[string(key)]
 
 	return val, ok
 }

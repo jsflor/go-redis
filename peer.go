@@ -1,36 +1,95 @@
 package main
 
 import (
-	"log/slog"
+	"fmt"
+	"io"
+	"log"
 	"net"
+
+	"github.com/tidwall/resp"
 )
 
 type Peer struct {
 	conn  net.Conn
-	msgCh chan []byte
+	msgCh chan Message
 }
 
-func NewPeer(conn net.Conn, msgCh chan []byte) *Peer {
+func NewPeer(conn net.Conn, msgCh chan Message) *Peer {
 	return &Peer{
 		conn:  conn,
 		msgCh: msgCh,
 	}
 }
 
-func (p *Peer) readLoop() error {
-	buf := make([]byte, 1024)
-	for {
-		n, err := p.conn.Read(buf)
+func (p *Peer) Send(msg []byte) (int, error) {
+	return p.conn.Write(msg)
+}
 
-		if err != nil {
-			slog.Error("peer read error", "err", err)
-			return err
+func (p *Peer) readLoop() error {
+	rd := resp.NewReader(p.conn)
+
+	for {
+		v, _, err := rd.ReadValue()
+
+		if err == io.EOF {
+			break
 		}
 
-		msfBuf := make([]byte, n)
-		copy(msfBuf, buf[:n])
+		if err != nil {
+			log.Fatal(err)
+		}
 
-		p.msgCh <- msfBuf
+		if v.Type() == resp.Array {
+			for _, value := range v.Array() {
 
+				switch value.String() {
+				case CommandGET:
+					if len(v.Array()) != 2 {
+						return fmt.Errorf("invalid number or variables for GET command")
+					}
+					cmd := GetCommand{
+						key: v.Array()[1].Bytes(),
+						// val: v.Array()[2].Bytes(),
+					}
+
+					p.msgCh <- Message{
+						cmd:  cmd,
+						peer: p,
+					}
+				case CommandSET:
+					if len(v.Array()) != 3 {
+						return fmt.Errorf("invalid number or variables for SET command")
+					}
+					cmd := SetCommand{
+						key: v.Array()[1].Bytes(),
+						val: v.Array()[2].Bytes(),
+					}
+					p.msgCh <- Message{
+						cmd:  cmd,
+						peer: p,
+					}
+				}
+			}
+		}
 	}
+
+	return nil
+	// buf := make([]byte, 1024)
+	// for {
+	// 	n, err := p.conn.Read(buf)
+
+	// 	if err != nil {
+	// 		slog.Error("peer read error", "err", err)
+	// 		return err
+	// 	}
+
+	// 	msfBuf := make([]byte, n)
+	// 	copy(msfBuf, buf[:n])
+
+	// 	p.msgCh <- Message{
+	// 		data: msfBuf,
+	// 		peer: p,
+	// 	}
+
+	// }
 }
